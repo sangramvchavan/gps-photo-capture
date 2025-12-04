@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GPS & Photo Capture</title>
+</head>
+<body style="font-family: Arial; padding: 20px;">
+  <h2>GPS & Photo Capture</h2>
+
+  <button id="getLocationBtn">Get GPS Location</button>
+  <p id="locationOutput"></p>
+
+  <h3>Capture Photo</h3>
+  <video id="camera" width="300" autoplay></video><br/><br/>
+  <button id="captureBtn">Capture</button>
+  <canvas id="snapshot" width="300" height="225" style="border:1px solid #ccc; margin-top:10px;"></canvas>
+
+<script>
+  // GPS
+  document.getElementById('getLocationBtn').onclick = function() {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        document.getElementById("locationOutput").innerText =
+          `Lat: ${pos.coords.latitude}, Long: ${pos.coords.longitude}`;
+      }, (err) => {
+        alert("Error: " + err.message);
+      });
+    } else {
+      alert("Geolocation not supported");
+    }
+  };
+
+  // Camera
+  navigator.mediaDevices.getUserMedia({ video: true })
+    .then(stream => {
+      document.getElementById('camera').srcObject = stream;
+    })
+    .catch(err => alert('Camera Error: ' + err));
+
+  // Google Drive Upload
+  function loadGapi() {
+    const script = document.createElement('script');
+    script.src = "https://apis.google.com/js/api.js";
+    script.onload = initGapi;
+    document.body.appendChild(script);
+  }
+
+  function initGapi() {
+    gapi.load('client:auth2', () => {
+      gapi.client.init({
+        apiKey: 'YOUR_API_KEY',
+        clientId: 'YOUR_CLIENT_ID.apps.googleusercontent.com',
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest']
+      });
+    });
+  }
+
+  async function authenticate() {
+    await gapi.auth2.getAuthInstance().signIn();
+  }
+
+  async function uploadToDrive(fileBlob, fileName) {
+    const fileMetadata = { name: fileName, mimeType: fileBlob.type };
+    const form = new FormData();
+    const metadata = new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' });
+    form.append('metadata', metadata);
+    form.append('file', fileBlob);
+
+    const accessToken = gapi.auth.getToken().access_token;
+
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST',
+      headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
+      body: form
+    });
+
+    const result = await res.json();
+    alert('Uploaded Successfully! File ID: ' + result.id);
+  }
+
+  document.getElementById('captureBtn').onclick = async function () {
+    const video = document.getElementById('camera');
+    const canvas = document.getElementById('snapshot');
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob(async (blob) => {
+      await authenticate();
+      uploadToDrive(blob, 'captured_photo.png');
+    });
+  };
+
+  loadGapi();
+</script>
+</body>
+</html>
